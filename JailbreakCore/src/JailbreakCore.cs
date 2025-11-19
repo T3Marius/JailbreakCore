@@ -4,9 +4,11 @@ using Jailbreak.Shared;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using SwiftlyS2.Shared;
+using SwiftlyS2.Shared.Events;
 using SwiftlyS2.Shared.GameEventDefinitions;
 using SwiftlyS2.Shared.GameEvents;
 using SwiftlyS2.Shared.Misc;
+using SwiftlyS2.Shared.Natives;
 using SwiftlyS2.Shared.Players;
 using SwiftlyS2.Shared.Plugins;
 using Tomlyn.Extensions.Configuration;
@@ -107,8 +109,10 @@ public partial class JailbreakCore : BasePlugin
     {
         Hooks?.Unregister();
         _provider?.Dispose();
-
+        Extensions?.CleanupAllLasers();
+        Extensions?.CleanupAllBeacons();
     }
+
     #region Events
     [GameEventHandler(HookMode.Pre)]
     public HookResult EventPlayerDeath(EventPlayerDeath @event)
@@ -190,6 +194,24 @@ public partial class JailbreakCore : BasePlugin
             surrenderTries.Remove(jbPlayer);
 
         JBPlayerManagement.Remove(player);
+
+        return HookResult.Continue;
+    }
+    [GameEventHandler(HookMode.Pre)]
+    public HookResult EventPlayerPing(EventPlayerPing @event)
+    {
+        IPlayer player = @event.UserIdPlayer;
+        if (player == null)
+            return HookResult.Continue;
+
+        var jbPlayer = JBPlayerManagement.GetOrCreate(player);
+
+        if (!jbPlayer.IsWarden)
+            return HookResult.Continue;
+
+        var pingPos = new Vector(@event.X, @event.Y, @event.Z);
+
+        Extensions.CreateWardenBeacon(jbPlayer, pingPos, radius: 64.0f, height: 5.0f, segments: 32, duration: 30.0f);
 
         return HookResult.Continue;
     }
@@ -372,6 +394,56 @@ public partial class JailbreakCore : BasePlugin
         jbPlayer.OnPlayerSpawn();
 
         return HookResult.Continue;
+    }
+    [EventListener<EventDelegates.OnTick>]
+    public void OnTick()
+    {
+        var warden = JBPlayerManagement.GetWarden();
+        if (warden == null || !warden.IsValid || !warden.Controller.PawnIsAlive)
+        {
+            // No warden or warden is invalid/dead - cleanup any existing laser
+            if (warden != null)
+                Extensions.RemoveWardenLaser(warden);
+            return;
+        }
+
+        // Check if warden is holding E key (bitwise check to allow other buttons)
+        if ((warden.Player.PressedButtons & GameButtonFlags.E) != 0)
+        {
+            // Get warden's eye position and forward vector
+            var absOrigin = warden.PlayerPawn.AbsOrigin;
+            if (!absOrigin.HasValue)
+                return;
+
+            var eyePos = new Vector(absOrigin.Value.X, absOrigin.Value.Y, absOrigin.Value.Z + 64); // Add eye height
+
+            var eyeAngles = warden.PlayerPawn.EyeAngles;
+
+            // Calculate forward direction from angles
+            double pitch = eyeAngles.Pitch * Math.PI / 180.0;
+            double yaw = eyeAngles.Yaw * Math.PI / 180.0;
+
+            float cosPitch = (float)Math.Cos(pitch);
+            float sinPitch = (float)Math.Sin(pitch);
+            float cosYaw = (float)Math.Cos(yaw);
+            float sinYaw = (float)Math.Sin(yaw);
+
+            // Calculate end position (4096 units ahead in view direction)
+            float distance = 4096.0f;
+            var endPos = new Vector(
+                eyePos.X + distance * cosPitch * cosYaw,
+                eyePos.Y + distance * cosPitch * sinYaw,
+                eyePos.Z - distance * sinPitch
+            );
+
+            // Create or update the laser
+            Extensions.UpdateWardenLaser(warden, eyePos, endPos);
+        }
+        else
+        {
+            // Not holding E - remove laser if it exists
+            Extensions.RemoveWardenLaser(warden);
+        }
     }
     #endregion
 
