@@ -237,7 +237,8 @@ The plugin is highly configurable. Check `config.toml` for:
 - [ ] Expand warden menu - More tools and options for better control
 
 #### Last Request Improvements
-- [ ] Last request beacons - Mark LR participants with glowing beacons
+- [ ] Connecting laser during LR prep timer - Draw laser between guardian and prisoner during preparation
+- [ ] Last request beacons - Circular beacons under guardian and prisoner during active LR
 - [ ] More last requests - Shotgun wars, mag-4-mag, race, and more
 
 Feel free to contribute or suggest features!
