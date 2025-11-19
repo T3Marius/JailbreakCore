@@ -14,6 +14,11 @@ namespace JailbreakCore;
 public class Extensions(ISwiftlyCore core)
 {
     private readonly ISwiftlyCore _Core = core;
+    private readonly Dictionary<JBPlayer, CEnvBeam?> _wardenLasers = new();
+    private readonly List<CEnvBeam?> _wardenBeacons = new();
+    private readonly Dictionary<JBPlayer, List<CEnvBeam?>> _wardenBeaconsByPlayer = new();
+    private static readonly Vector ANGLE_ZERO = new Vector(0, 0, 0);
+    private static readonly Vector VEC_ZERO = new Vector(0, 0, 0);
     public void PrintToChatAll(string message, bool showPrefix, IPrefix prefixType)
     {
         string prefix = "";
@@ -308,4 +313,224 @@ public class Extensions(ISwiftlyCore core)
 
         PrintToChatAll("bh_toggled", true, IPrefix.JB, isEnabled);
     }
+
+    #region Entity Management
+
+    /// <summary>
+    /// Get total entity count in the server
+    /// </summary>
+    public int GetEntityCount()
+    {
+        return _Core.EntitySystem.GetAllEntities().Count();
+    }
+
+    #endregion
+
+    #region Laser System
+
+    /// <summary>
+    /// Create a laser beam between two points
+    /// </summary>
+    public CEnvBeam? CreateLaser(Vector start, Vector end, float width, Color color)
+    {
+        var laser = _Core.EntitySystem.CreateEntity<CEnvBeam>();
+
+        if (laser == null)
+        {
+            _Core.Logger.LogWarning("Failed to create laser beam entity");
+            return null;
+        }
+
+        // Setup appearance
+        laser.Render = color;
+        laser.Width = width;
+
+        // Set position
+        MoveLaser(laser, start, end);
+
+        // Spawn the entity
+        laser.DispatchSpawn();
+
+        return laser;
+    }
+
+    /// <summary>
+    /// Move an existing laser beam to new positions
+    /// </summary>
+    public void MoveLaser(CEnvBeam laser, Vector start, Vector end)
+    {
+        if (laser == null || !laser.IsValid)
+            return;
+
+        // Teleport laser to start position
+        laser.Teleport(start, new QAngle(0, 0, 0), VEC_ZERO);
+
+        // Set end position
+        laser.EndPos.X = end.X;
+        laser.EndPos.Y = end.Y;
+        laser.EndPos.Z = end.Z;
+
+        // Notify state change using SwiftlyS2 method
+        laser.EndPosUpdated();
+    }
+
+    /// <summary>
+    /// Change laser color
+    /// </summary>
+    public void SetLaserColor(CEnvBeam? laser, Color color)
+    {
+        if (laser != null && laser.IsValid)
+        {
+            laser.RenderMode = RenderMode_t.kRenderTransColor;
+            laser.Render = color;
+
+            laser.RenderUpdated();
+            laser.RenderModeUpdated();
+        }
+    }
+
+    /// <summary>
+    /// Remove a laser beam
+    /// </summary>
+    public void RemoveLaser(CEnvBeam? laser)
+    {
+        if (laser != null && laser.IsValid)
+        {
+            laser.AcceptInput("Kill", value: "");
+        }
+    }
+
+    /// <summary>
+    /// Create or update warden's laser pointer
+    /// </summary>
+    public void UpdateWardenLaser(JBPlayer warden, Vector start, Vector end)
+    {
+        if (!_wardenLasers.ContainsKey(warden) || _wardenLasers[warden] == null || !_wardenLasers[warden]!.IsValid)
+        {
+            // Create new laser
+            var laser = CreateLaser(start, end, 2.0f, Color.FromHex("#FF0000FF")); // Red laser
+            _wardenLasers[warden] = laser;
+        }
+        else
+        {
+            // Update existing laser position
+            MoveLaser(_wardenLasers[warden]!, start, end);
+        }
+    }
+
+    /// <summary>
+    /// Remove warden's laser when they stop using it
+    /// </summary>
+    public void RemoveWardenLaser(JBPlayer warden)
+    {
+        if (_wardenLasers.TryGetValue(warden, out var laser))
+        {
+            RemoveLaser(laser);
+            _wardenLasers.Remove(warden);
+        }
+    }
+
+    /// <summary>
+    /// Clean up all warden lasers
+    /// </summary>
+    public void CleanupAllLasers()
+    {
+        foreach (var laser in _wardenLasers.Values)
+        {
+            RemoveLaser(laser);
+        }
+        _wardenLasers.Clear();
+    }
+
+    #endregion
+
+    #region Beacon System
+
+    /// <summary>
+    /// Create a circular beacon at a specific position (drawn on the ground)
+    /// </summary>
+    /// <param name="warden">The warden placing the beacon</param>
+    /// <param name="position">Center position of the beacon</param>
+    /// <param name="radius">Radius of the circle in units</param>
+    /// <param name="height">Height above ground to draw the circle</param>
+    /// <param name="segments">Number of segments forming the circle (more = smoother circle)</param>
+    /// <param name="duration">Duration in seconds before beacon disappears</param>
+    public void CreateWardenBeacon(JBPlayer warden, Vector position, float radius = 64.0f, float height = 5.0f, int segments = 32, float duration = 30.0f)
+    {
+        // Remove previous beacon from this warden
+        RemoveWardenBeacon(warden);
+
+        var beaconGroup = new List<CEnvBeam?>();
+
+        // Create circle by connecting points around the circumference
+        for (int i = 0; i < segments; i++)
+        {
+            // Current point on circle
+            float angle1 = (float)(2 * Math.PI * i / segments);
+            float x1 = position.X + radius * (float)Math.Cos(angle1);
+            float y1 = position.Y + radius * (float)Math.Sin(angle1);
+
+            // Next point on circle (connect to form the circle)
+            float angle2 = (float)(2 * Math.PI * (i + 1) / segments);
+            float x2 = position.X + radius * (float)Math.Cos(angle2);
+            float y2 = position.Y + radius * (float)Math.Sin(angle2);
+
+            // Draw beam between consecutive points
+            var startPos = new Vector(x1, y1, position.Z + height);
+            var endPos = new Vector(x2, y2, position.Z + height);
+
+            var beam = CreateLaser(startPos, endPos, 2.0f, Color.FromHex("#00FF00FF")); // Green beams
+
+            if (beam != null)
+            {
+                beaconGroup.Add(beam);
+                _wardenBeacons.Add(beam);
+            }
+        }
+
+        // Store beacons for this warden
+        _wardenBeaconsByPlayer[warden] = beaconGroup;
+
+        // Schedule removal after duration
+        _Core.Scheduler.DelayBySeconds(duration, () =>
+        {
+            foreach (var beam in beaconGroup)
+            {
+                RemoveLaser(beam);
+                _wardenBeacons.Remove(beam);
+            }
+            _wardenBeaconsByPlayer.Remove(warden);
+        });
+    }
+
+    /// <summary>
+    /// Remove a specific warden's beacon
+    /// </summary>
+    public void RemoveWardenBeacon(JBPlayer warden)
+    {
+        if (_wardenBeaconsByPlayer.TryGetValue(warden, out var beaconGroup))
+        {
+            foreach (var beam in beaconGroup)
+            {
+                RemoveLaser(beam);
+                _wardenBeacons.Remove(beam);
+            }
+            _wardenBeaconsByPlayer.Remove(warden);
+        }
+    }
+
+    /// <summary>
+    /// Remove all warden beacons
+    /// </summary>
+    public void CleanupAllBeacons()
+    {
+        foreach (var beacon in _wardenBeacons)
+        {
+            RemoveLaser(beacon);
+        }
+        _wardenBeacons.Clear();
+        _wardenBeaconsByPlayer.Clear();
+    }
+
+    #endregion
 }
