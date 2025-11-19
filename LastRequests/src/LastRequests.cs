@@ -2,6 +2,9 @@ using Jailbreak.Shared;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using SwiftlyS2.Shared;
+using SwiftlyS2.Shared.Events;
+using SwiftlyS2.Shared.GameEventDefinitions;
+using SwiftlyS2.Shared.Misc;
 using SwiftlyS2.Shared.Plugins;
 using Tomlyn.Extensions.Configuration;
 
@@ -133,6 +136,9 @@ public partial class LastRequests : BasePlugin
     {
         if (Config.KnifeFight.Enable)
             Api.LastRequest.Register(new KnifeFight(Core, Api, Library));
+
+        if (Config.GrenadeWar.Enable)
+            Api.LastRequest.Register(new GrenadeWar(Core, Api, Library));
     }
 }
 public class KnifeFight(ISwiftlyCore _core, IJailbreakApi _api, Library _library) : ILastRequest
@@ -201,5 +207,118 @@ public class KnifeFight(ISwiftlyCore _core, IJailbreakApi _api, Library _library
     public void End(IJBPlayer? winner, IJBPlayer? loser)
     {
 
+    }
+}
+public class GrenadeWar(ISwiftlyCore _core, IJailbreakApi _api, Library _library) : ILastRequest
+{
+    private readonly ISwiftlyCore Core = _core;
+    private readonly IJailbreakApi Api = _api;
+    private readonly Library Library = _library;
+    private GrenadeWar_LR Config => LastRequests.Config.GrenadeWar;
+
+    public string Name => Core.Localizer["grenade_war_lr<name>"];
+    public string Description => string.Empty;
+
+    public IJBPlayer? Prisoner { get; set; } = null;
+    public IJBPlayer? Guardian { get; set; } = null;
+
+    public string SelectedWeaponName { get; set; } = string.Empty;
+    public string SelectedWeaponID { get; set; } = string.Empty;
+
+    public IReadOnlyList<(string DisplayName, string ClassName)> GetAvailableWeapons() =>
+        new List<(string, string)>
+        {
+            ("HE Grenade", "weapon_hegrenade")
+        };
+
+    public string? SelectedType { get; set; } = string.Empty;
+    public IReadOnlyList<string> GetAvailableTypes() => new List<string>();
+    public bool IsPrepTimerActive { get; set; }
+
+    private HashSet<ushort> AllowedWeaponsDefIndex = new();
+    private int grenadesThrown = 0;
+    private bool canThrow = true;
+
+    public void Start(IJBPlayer guardian, IJBPlayer prisoner)
+    {
+        Guardian = guardian;
+        Prisoner = prisoner;
+
+        if (Guardian == null || Prisoner == null)
+            return;
+        grenadesThrown = 0;
+        canThrow = true;
+
+        if (LastRequests.WeaponItemDefinitionIndices.TryGetValue(SelectedWeaponID, out int defIndex))
+        {
+            AllowedWeaponsDefIndex.Add((ushort)defIndex);
+        }
+        Guardian.StripWeapons(keepKnife: false);
+        Prisoner.StripWeapons(keepKnife: false);
+
+        Core.Scheduler.NextTick(() =>
+        {
+            for (int i = 0; i < Config.GrenadeCount; i++)
+            {
+                Guardian.PlayerPawn.ItemServices?.GiveItem(SelectedWeaponID);
+                Prisoner.PlayerPawn.ItemServices?.GiveItem(SelectedWeaponID);
+            }
+        });
+
+        Core.Event.OnItemServicesCanAcquireHook += OnCanAcquire;
+
+        Core.GameEvent.HookPost<EventGrenadeThrown>(OnGrenadeThrown);
+
+        Api.Utilities.PrintToChatAll($"grenade_war_started", true, IPrefix.LR, Guardian.Controller.PlayerName, Prisoner.Controller.PlayerName, SelectedWeaponName);
+    }
+
+    public void End(IJBPlayer? winner, IJBPlayer? loser)
+    {
+        Core.Event.OnItemServicesCanAcquireHook -= OnCanAcquire;
+        Core.GameEvent.UnhookPost<EventGrenadeThrown>();
+
+        if (Guardian != null && Guardian.IsValid)
+        {
+            Guardian.StripWeapons(keepKnife: true);
+        }
+
+        if (Prisoner != null && Prisoner.IsValid)
+        {
+            Prisoner.StripWeapons(keepKnife: true);
+        }
+    }
+
+    private void OnCanAcquire(IOnItemServicesCanAcquireHookEvent @event)
+    {
+        var econItem = @event.EconItemView;
+        if (!AllowedWeaponsDefIndex.Contains(econItem.ItemDefinitionIndex))
+        {
+            @event.SetAcquireResult(AcquireResult.NotAllowedByProhibition);
+        }
+    }
+
+    private HookResult OnGrenadeThrown(EventGrenadeThrown @event)
+    {
+        var thrower = @event.UserIdPlayer;
+        if (thrower == null)
+            return HookResult.Continue;
+
+        var jbThrower = Api.Players.GetPlayer(thrower);
+        if (jbThrower == null || (jbThrower != Guardian && jbThrower != Prisoner))
+            return HookResult.Continue;
+
+        grenadesThrown++;
+
+        if (grenadesThrown % 2 == 0)
+        {
+            // delay for next throw!
+            canThrow = false;
+            Core.Scheduler.DelayBySeconds(Config.ThrowDelay, () =>
+            {
+                canThrow = true;
+            });
+        }
+
+        return HookResult.Continue;
     }
 }
