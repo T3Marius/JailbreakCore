@@ -144,7 +144,7 @@ public partial class JailbreakCore : BasePlugin
             {
                 foreach (var p in JBPlayerManagement.GetAllPlayers())
                 {
-                    p.PlaySound(Config.Sounds.WardenKilled.Path, Config.Sounds.WardenKilled.Volume);
+                    //p.PlaySound(Config.Sounds.WardenKilled.Path, Config.Sounds.WardenKilled.Volume);
                 }
             }
 
@@ -252,7 +252,7 @@ public partial class JailbreakCore : BasePlugin
                     {
                         foreach (var otherJbPlayer in JBPlayerManagement.GetAllPlayers())
                         {
-                            otherJbPlayer.PlaySound(Config.Sounds.WardenTake.Path, Config.Sounds.WardenTake.Volume);
+                            //otherJbPlayer.PlaySound(Config.Sounds.WardenTake.Path, Config.Sounds.WardenTake.Volume);
                         }
                     }
                 }
@@ -342,7 +342,7 @@ public partial class JailbreakCore : BasePlugin
             {
                 if (!string.IsNullOrEmpty(Config.Sounds.Rebel.Path))
                 {
-                    otherJbPlayer.PlaySound(Config.Sounds.Rebel.Path, Config.Sounds.Rebel.Volume);
+                    //otherJbPlayer.PlaySound(Config.Sounds.Rebel.Path, Config.Sounds.Rebel.Volume);
                 }
             }
         }
@@ -376,7 +376,7 @@ public partial class JailbreakCore : BasePlugin
             {
                 if (!string.IsNullOrEmpty(Config.Sounds.Rebel.Path))
                 {
-                    otherJbPlayer.PlaySound(Config.Sounds.Rebel.Path, Config.Sounds.Rebel.Volume);
+                    //otherJbPlayer.PlaySound(Config.Sounds.Rebel.Path, Config.Sounds.Rebel.Volume);
                 }
             }
         }
