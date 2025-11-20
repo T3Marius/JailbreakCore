@@ -139,6 +139,9 @@ public partial class LastRequests : BasePlugin
 
         if (Config.GrenadeWar.Enable)
             Api.LastRequest.Register(new GrenadeWar(Core, Api, Library));
+
+        if (Config.RussianRoulette.Enable)
+            Api.LastRequest.Register(new RussianRoulette(Core, Api, Library));
     }
 }
 public class KnifeFight(ISwiftlyCore _core, IJailbreakApi _api, Library _library) : ILastRequest
@@ -228,11 +231,11 @@ public class GrenadeWar(ISwiftlyCore _core, IJailbreakApi _api, Library _library
     public IReadOnlyList<(string DisplayName, string ClassName)> GetAvailableWeapons() =>
         new List<(string, string)>
         {
-            ("HE Grenade", "weapon_hegrenade")
+            ("HE Grenade", "weapon_hegrenade") // only he are allowed for now!
         };
 
     public string? SelectedType { get; set; } = string.Empty;
-    public IReadOnlyList<string> GetAvailableTypes() => new List<string>();
+    public IReadOnlyList<string> GetAvailableTypes() => new List<string>(); 
     public bool IsPrepTimerActive { get; set; }
 
     private HashSet<ushort> AllowedWeaponsDefIndex = new();
@@ -320,5 +323,141 @@ public class GrenadeWar(ISwiftlyCore _core, IJailbreakApi _api, Library _library
         }
 
         return HookResult.Continue;
+    }
+}
+public class RussianRoulette(ISwiftlyCore _core, IJailbreakApi _api, Library _library) : ILastRequest
+{
+    private readonly ISwiftlyCore Core = _core;
+    private readonly IJailbreakApi Api = _api;
+    private readonly Library Library = _library;
+    private RussianRoulette_LR Config => LastRequests.Config.RussianRoulette;
+
+    public string Name => Core.Localizer["russian_roulette_lr<name>"];
+    public string Description => string.Empty;
+
+    public IJBPlayer? Prisoner { get; set; } = null;
+    public IJBPlayer? Guardian { get; set; } = null;
+
+    public string SelectedWeaponName { get; set; } = string.Empty;
+    public string SelectedWeaponID { get; set; } = string.Empty;
+
+    public IReadOnlyList<(string DisplayName, string ClassName)> GetAvailableWeapons() =>
+        new List<(string, string)>
+        {
+            ("Revolver", "weapon_revolver")
+        };
+
+    public string? SelectedType { get; set; } = string.Empty;
+    public IReadOnlyList<string> GetAvailableTypes() => new List<string>();
+    public bool IsPrepTimerActive { get; set; }
+
+    private int currentRound = 0;
+    private int bulletPosition = 0;
+    private bool isGuardianTurn = true;
+    private CancellationTokenSource? turnTimer = null;
+
+    public void Start(IJBPlayer guardian, IJBPlayer prisoner)
+    {
+        Guardian = guardian;
+        Prisoner = prisoner;
+
+        if (Guardian == null || Prisoner == null)
+            return;
+
+        currentRound = 0;
+        bulletPosition = new Random().Next(1, Config.MaxRounds + 1);
+        isGuardianTurn = new Random().Next(2) == 0;
+
+        Guardian.StripWeapons(keepKnife: false);
+        Prisoner.StripWeapons(keepKnife: false);
+
+        Core.Scheduler.NextTick(() =>
+        {
+            Guardian.PlayerPawn.ItemServices?.GiveItem("weapon_revolver");
+            Prisoner.PlayerPawn.ItemServices?.GiveItem("weapon_revolver");
+
+            SetRevolverAmmo(Guardian, 1);
+            SetRevolverAmmo(Prisoner, 1);
+        });
+
+        Api.Utilities.PrintToChatAll($"russian_roulette_started", true, IPrefix.LR, Guardian.Controller.PlayerName, Prisoner.Controller.PlayerName);
+        Api.Utilities.PrintToChatAll($"Bullet is in chamber {bulletPosition}/{Config.MaxRounds}", false, IPrefix.LR);
+
+        StartTurn();
+    }
+
+    private void SetRevolverAmmo(IJBPlayer player, int ammo)
+    {
+        var weapons = player.PlayerPawn.WeaponServices?.MyWeapons;
+        if (weapons == null) return;
+
+        foreach (var handle in weapons)
+        {
+            var weapon = handle.Value;
+            if (weapon?.DesignerName == "weapon_revolver")
+            {
+                weapon.Clip1 = ammo;
+                weapon.Clip1Updated();
+                weapon.ReserveAmmo[0] = 0;
+            }
+        }
+    }
+
+    private void StartTurn()
+    {
+        currentRound++;
+
+        if (currentRound > Config.MaxRounds)
+        {
+            Api.Utilities.PrintToChatAll("Russian Roulette ended in a tie!", true, IPrefix.LR);
+            Api.LastRequest.EndActive();
+            return;
+        }
+
+        var currentPlayer = isGuardianTurn ? Guardian : Prisoner;
+        var otherPlayer = isGuardianTurn ? Prisoner : Guardian;
+
+        if (currentPlayer == null || !currentPlayer.IsValid)
+        {
+            Api.LastRequest.EndActive();
+            return;
+        }
+
+        Api.Utilities.PrintToChatAll($"Round {currentRound}: {currentPlayer.Controller.PlayerName}'s turn!", true, IPrefix.LR);
+
+        turnTimer = Core.Scheduler.DelayBySeconds(Config.TurnDelay, () =>
+        {
+            if (currentRound == bulletPosition)
+            {
+                if (currentPlayer.IsValid && currentPlayer.PlayerPawn != null)
+                {
+                    currentPlayer.PlayerPawn.CommitSuicide(false, true);
+                    Api.Utilities.PrintToChatAll($"{currentPlayer.Controller.PlayerName} lost Russian Roulette!", true, IPrefix.LR);
+                }
+                Api.LastRequest.EndActive();
+            }
+            else
+            {
+                Api.Utilities.PrintToChatAll($"{currentPlayer.Controller.PlayerName} survived! Click!", false, IPrefix.LR);
+                isGuardianTurn = !isGuardianTurn;
+                StartTurn();
+            }
+        });
+    }
+
+    public void End(IJBPlayer? winner, IJBPlayer? loser)
+    {
+        turnTimer?.Cancel();
+        turnTimer = null;
+
+        if (Guardian != null && Guardian.IsValid)
+        {
+            Guardian.StripWeapons(keepKnife: true);
+        }
+
+        if (Prisoner != null && Prisoner.IsValid)
+        {
+            Prisoner.StripWeapons(keepKnife: true);
+        }
     }
 }
