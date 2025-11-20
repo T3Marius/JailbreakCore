@@ -1,6 +1,8 @@
+using System;
 using Jailbreak.Shared;
 using JailbreakCore;
 using SwiftlyS2.Shared.Misc;
+using SwiftlyS2.Shared.Natives;
 using SwiftlyS2.Shared.Players;
 using CorePlugin = JailbreakCore.JailbreakCore;
 
@@ -75,6 +77,49 @@ public class Api : IJailbreakApi
         public void PrintToCenterAll(string key, params object[] args)
         {
             CorePlugin.Extensions.PrintToCenterAll(key, args);
+        }
+
+        public Guid DrawLaserBetweenPlayers(IJBPlayer playerA, IJBPlayer playerB, Color? colorOverride = null, float width = 2.0f, float heightOffset = 64.0f, float durationSeconds = 0f)
+        {
+            var internalA = RequireInternalPlayer(playerA);
+            var internalB = RequireInternalPlayer(playerB);
+
+            return CorePlugin.Extensions.StartPlayerLinkLaser(internalA, internalB, colorOverride, width, heightOffset, durationSeconds);
+        }
+
+        public void RemovePlayerLinkLaser(Guid effectId)
+        {
+            CorePlugin.Extensions.StopPlayerLinkLaser(effectId);
+        }
+
+        public void RemoveAllPlayerLinkLasers()
+        {
+            CorePlugin.Extensions.StopAllPlayerLinkLasers();
+        }
+
+        public Guid CreatePlayerBeacon(IJBPlayer player, Color? colorOverride = null, int segments = 20, float startRadius = 20.0f, float radiusStep = 10.0f, float durationSeconds = 0.9f, float heightOffset = 5.0f, float stepIntervalSeconds = 0.1f, float width = 2.0f, bool loop = false)
+        {
+            var internalPlayer = RequireInternalPlayer(player);
+
+            return CorePlugin.Extensions.CreateBeaconAnimationOnPlayer(internalPlayer, colorOverride, segments, startRadius, radiusStep, durationSeconds, heightOffset, stepIntervalSeconds, width, loop);
+        }
+
+        public void RemovePlayerBeacon(Guid beaconId)
+        {
+            CorePlugin.Extensions.StopPlayerBeacon(beaconId);
+        }
+
+        public void RemoveAllPlayerBeacons()
+        {
+            CorePlugin.Extensions.StopAllPlayerBeacons();
+        }
+
+        private static JBPlayer RequireInternalPlayer(IJBPlayer player)
+        {
+            if (player is not JBPlayer jbPlayer)
+                throw new ArgumentException("The provided player reference is not managed by JailbreakCore.", nameof(player));
+
+            return jbPlayer;
         }
     }
 }
