@@ -96,8 +96,7 @@ public class Hooks(ISwiftlyCore core)
     {
         foreach (var player in _Core.PlayerManager.GetAllPlayers())
         {
-            var pawn = player.PlayerPawn;
-            if (pawn != null && pawn.Address == address)
+            if (player.PlayerPawn?.Address == address)
                 return player;
         }
 
