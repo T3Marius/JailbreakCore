@@ -25,7 +25,7 @@ public class SpecialDay
     {
         if (CooldownInRounds > 0)
         {
-            player.Print(IHud.Chat, "day_on_cooldown", showPrefix: true, prefixType: IPrefix.SD, args: CooldownInRounds);
+            player.Print(IHud.Chat, "day_on_cooldown", null, showPrefix: true, prefixType: IPrefix.SD, args: new object[] { CooldownInRounds });
             return;
         }
 

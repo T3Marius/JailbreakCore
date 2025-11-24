@@ -185,7 +185,7 @@ public class JBPlayer : IDisposable, IJBPlayer
             SetRole(IJBRole.None);
         }
     }
-    public void Print(IHud hud, string? key = "", string? message = "", int duration = 5, bool showPrefix = true, IPrefix prefixType = IPrefix.JB, params object[] args)
+    public void Print(IHud hud, string? key = null, string? message = null, int duration = 5, bool showPrefix = true, IPrefix prefixType = IPrefix.JB, params object[] args)
     {
         string prefix = "";
         if (showPrefix)
