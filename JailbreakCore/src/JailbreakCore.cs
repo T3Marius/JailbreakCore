@@ -2,6 +2,7 @@
 using AudioApi;
 using Jailbreak;
 using Jailbreak.Shared;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using SwiftlyS2.Shared;
@@ -64,10 +65,10 @@ public partial class JailbreakCore : BasePlugin
         }
 
         Core.Configuration
-            .InitializeTomlWithModel<JailbreakConfig>("config.toml", "JailbreakCore")
+            .InitializeJsonWithModel<JailbreakConfig>("config.json", "JailbreakCore")
             .Configure(builder =>
             {
-                builder.AddTomlFile("config.toml", optional: false, reloadOnChange: true);
+                builder.AddJsonFile("config.json", optional: false, reloadOnChange: true);
             });
 
         ServiceCollection services = new();
