@@ -924,5 +924,24 @@ public class Extensions(ISwiftlyCore core)
         };
     }
 
+    public IPlayer? ResolvePlayerFromHandle(CHandle<CEntityInstance> handle)
+    {
+        if (!handle.IsValid)
+            return null;
+
+        var entity = handle.Value;
+        if (entity == null)
+            return null;
+
+        foreach (var player in _Core.PlayerManager.GetAllPlayers())
+        {
+            if (player.PlayerPawn?.Address == entity.Address ||
+                player.Controller?.Address == entity.Address)
+                return player;
+        }
+
+        return null;
+    }
+
     #endregion
 }

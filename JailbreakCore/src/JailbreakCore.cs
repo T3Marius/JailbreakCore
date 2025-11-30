@@ -2,6 +2,7 @@ using Jailbreak;
 using Jailbreak.Shared;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using SwiftlyS2.Shared;
 using SwiftlyS2.Shared.Events;
@@ -11,6 +12,7 @@ using SwiftlyS2.Shared.Misc;
 using SwiftlyS2.Shared.Natives;
 using SwiftlyS2.Shared.Players;
 using SwiftlyS2.Shared.Plugins;
+using SwiftlyS2.Shared.SchemaDefinitions;
 
 namespace JailbreakCore;
 
@@ -112,6 +114,26 @@ public partial class JailbreakCore : BasePlugin
     }
 
     #region Events
+    [EventListener<EventDelegates.OnEntityTakeDamage>]
+    public void OnEntityTakeDamage(IOnEntityTakeDamageEvent @event)
+    {
+        CTakeDamageInfo info = @event.Info;
+
+        var attackerPlayer = Extensions.ResolvePlayerFromHandle(info.Attacker);
+        if (attackerPlayer == null || !attackerPlayer.IsValid)
+            return;
+
+        var jbAttacker = JBPlayerManagement.GetOrCreate(attackerPlayer);
+        if (!jbAttacker.IsWarden)
+            return;
+
+        var entity = @event.Entity;
+
+        if (entity.DesignerName.Contains("weapon"))
+        {
+            Core.Scheduler.NextWorldUpdate(() => entity.Despawn());
+        }
+    }
     [GameEventHandler(HookMode.Pre)]
     public HookResult EventPlayerDeath(EventPlayerDeath @event)
     {
@@ -179,8 +201,6 @@ public partial class JailbreakCore : BasePlugin
         var player = @event.UserIdPlayer;
         if (player == null || player.IsFakeClient)
             return HookResult.Continue;
-
-        JBPlayerManagement.GetOrCreate(player); // create the JBPlayer before just in case.
 
         return HookResult.Continue;
     }
@@ -420,6 +440,11 @@ public partial class JailbreakCore : BasePlugin
                     otherJbPlayer.PlaySound(Config.Sounds.Rebel.Path, Config.Sounds.Rebel.Volume);
                 }
             }
+        }
+
+        if (jbPlayer.IsWarden)
+        {
+
         }
 
         return HookResult.Continue;
