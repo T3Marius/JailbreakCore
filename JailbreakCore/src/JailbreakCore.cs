@@ -1,5 +1,3 @@
-//using AudioApi;
-using AudioApi;
 using Jailbreak;
 using Jailbreak.Shared;
 using Microsoft.Extensions.Configuration;
@@ -32,7 +30,6 @@ public partial class JailbreakCore : BasePlugin
     public static SurrenderMenu SurrenderMenu = null!;
     public static HealMenu HealMenu = null!;
     public static Hooks Hooks = null!;
-    public static IAudioApi Audio = null!;
     public static JailbreakConfig Config { get; set; } = new JailbreakConfig();
 
     public static bool g_IsBoxActive = false;
@@ -54,7 +51,7 @@ public partial class JailbreakCore : BasePlugin
 
     public override void UseSharedInterface(IInterfaceManager interfaceManager)
     {
-        Audio = interfaceManager.GetSharedInterface<IAudioApi>("audio");
+
     }
     public override void Load(bool hotReload)
     {
